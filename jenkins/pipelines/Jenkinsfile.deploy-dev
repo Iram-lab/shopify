@@ -1,0 +1,279 @@
+// ─── Stage 3: Deploy Dev (No Docker) ─────────────────────────────────
+// Auto-triggered after CI Main succeeds.
+// Starts all 9 Spring Boot services directly using java -jar on Windows.
+// Flow: Stop old → Start new JARs → Wait for Eureka → Smoke Test → Integration Tests
+// ─────────────────────────────────────────────────────────────────────
+
+@Library('shopmicro-shared') _
+
+pipeline {
+    agent { label 'builder' }
+
+    parameters {
+        string(name: 'VERSION', description: 'Version from CI Main pipeline')
+    }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
+    environment {
+        ENV         = 'dev'
+        DEPLOY_DIR  = 'C:\\shopmicro\\jars'
+        LOG_DIR     = 'C:\\shopmicro\\logs\\dev'
+        GATEWAY_URL = 'http://localhost:8080'
+        JAVA_HOME   = tool name: 'jdk-21', type: 'jdk'
+        PATH        = "${JAVA_HOME}/bin:${PATH}"
+    }
+
+    stages {
+
+        // ── Stop any previously running services ──
+        stage('Stop Old Services') {
+            steps {
+                script {
+                    echo "Stopping any previously running ShopMicro services..."
+                    // Kill all java processes running shopmicro JARs
+                    // returnStatus:true so pipeline doesn't fail if nothing is running
+                    bat(script: '''
+                        for /f "tokens=2" %%i in ('tasklist /fi "imagename eq java.exe" /fo csv /nh 2^>nul') do (
+                            wmic process where "ProcessId=%%~i" get CommandLine 2>nul | findstr /i "shopmicro" >nul && taskkill /PID %%~i /F 2>nul
+                        )
+                        echo Done stopping old services
+                    ''', returnStatus: true)
+                    sleep(time: 5, unit: 'SECONDS')
+                }
+            }
+        }
+
+        // ── Create log directory ──
+        stage('Prepare') {
+            steps {
+                bat "if not exist \"${env.LOG_DIR}\" mkdir \"${env.LOG_DIR}\""
+                echo "✅ Log directory ready: ${env.LOG_DIR}"
+            }
+        }
+
+        // ── Start Eureka Server first ──
+        stage('Start Eureka') {
+            steps {
+                script {
+                    bat """
+                        start "eureka-server" /B java -jar ^
+                            -Dspring.profiles.active=dev ^
+                            -Dserver.port=8761 ^
+                            "${env.DEPLOY_DIR}\\eureka-server.jar" ^
+                            > "${env.LOG_DIR}\\eureka-server.log" 2>&1
+                    """
+                    echo "⏳ Waiting 30s for Eureka to start..."
+                    sleep(time: 30, unit: 'SECONDS')
+                }
+            }
+        }
+
+        // ── Start all other services in parallel ──
+        stage('Start Services') {
+            steps {
+                script {
+                    def services = [
+                        [name: 'api-gateway',         port: 8080, profile: 'dev'],
+                        [name: 'auth-service',         port: 8081, profile: 'dev'],
+                        [name: 'product-service',      port: 8082, profile: 'dev'],
+                        [name: 'inventory-service',    port: 8083, profile: 'dev'],
+                        [name: 'cart-service',         port: 8084, profile: 'dev'],
+                        [name: 'payment-service',      port: 8085, profile: 'dev'],
+                        [name: 'order-service',        port: 8086, profile: 'dev'],
+                        [name: 'notification-service', port: 8087, profile: 'dev'],
+                    ]
+
+                    services.each { svc ->
+                        bat """
+                            start "${svc.name}" /B java -jar ^
+                                -Dspring.profiles.active=${svc.profile} ^
+                                -Dserver.port=${svc.port} ^
+                                -Deureka.client.serviceUrl.defaultZone=http://localhost:8761/eureka/ ^
+                                "${env.DEPLOY_DIR}\\${svc.name}.jar" ^
+                                > "${env.LOG_DIR}\\${svc.name}.log" 2>&1
+                        """
+                        echo "🚀 Started: ${svc.name} on port ${svc.port}"
+                        sleep(time: 5, unit: 'SECONDS')
+                    }
+
+                    echo "⏳ Waiting 60s for all services to fully start..."
+                    sleep(time: 60, unit: 'SECONDS')
+                }
+            }
+        }
+
+        // ── Wait for all services to register with Eureka ──
+        stage('Eureka Health Check') {
+            steps {
+                script {
+                    def services = [
+                        'api-gateway', 'auth-service', 'product-service',
+                        'inventory-service', 'cart-service', 'order-service',
+                        'payment-service', 'notification-service'
+                    ]
+                    def maxWait = 120
+                    def interval = 10
+                    def elapsed = 0
+                    def allUp = false
+
+                    while (elapsed < maxWait && !allUp) {
+                        allUp = true
+                        services.each { svc ->
+                            def status = bat(
+                                script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:8761/eureka/apps/${svc.toUpperCase()} 2>nul",
+                                returnStdout: true
+                            ).trim().readLines().last()
+
+                            if (status == '200') {
+                                echo "  ✅ ${svc} registered in Eureka"
+                            } else {
+                                echo "  ⏳ ${svc} not yet registered (${elapsed}s)..."
+                                allUp = false
+                            }
+                        }
+                        if (!allUp) {
+                            sleep(time: interval, unit: 'SECONDS')
+                            elapsed += interval
+                        }
+                    }
+
+                    if (!allUp) {
+                        error "❌ Not all services registered with Eureka within ${maxWait}s"
+                    }
+                    echo "✅ All services registered with Eureka!"
+                }
+            }
+        }
+
+        // ── Smoke Test all /actuator/health endpoints ──
+        stage('Smoke Test') {
+            steps {
+                script {
+                    def services = [
+                        [name: 'eureka-server',        port: 8761],
+                        [name: 'api-gateway',           port: 8080],
+                        [name: 'auth-service',          port: 8081],
+                        [name: 'product-service',       port: 8082],
+                        [name: 'inventory-service',     port: 8083],
+                        [name: 'cart-service',          port: 8084],
+                        [name: 'payment-service',       port: 8085],
+                        [name: 'order-service',         port: 8086],
+                        [name: 'notification-service',  port: 8087],
+                    ]
+
+                    def failed = 0
+                    services.each { svc ->
+                        def status = bat(
+                            script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 10 2>nul",
+                            returnStdout: true
+                        ).trim().readLines().last()
+
+                        if (status == '200') {
+                            echo "  ✅ ${svc.name} → UP"
+                        } else {
+                            echo "  ❌ ${svc.name} → HTTP ${status}"
+                            failed++
+                        }
+                    }
+
+                    if (failed > 0) {
+                        error "❌ ${failed} service(s) failed smoke test"
+                    }
+                    echo "✅ All smoke tests passed!"
+                }
+            }
+        }
+
+        // ── Integration Tests via Newman (Postman) ──
+        stage('Integration Tests') {
+            steps {
+                script {
+                    bat 'npm install -g newman --prefer-offline 2>nul || echo Newman already installed'
+
+                    def collections = findFiles(glob: 'infra/postman/**/*.postman_collection.json')
+
+                    if (collections.size() == 0) {
+                        echo 'No Postman collections found — skipping integration tests'
+                        return
+                    }
+
+                    def failed = 0
+                    collections.each { col ->
+                        echo "═══ Running: ${col.name} ═══"
+                        def status = bat(
+                            script: """
+                                newman run "${col.path}" ^
+                                    --env-var "baseUrl=${env.GATEWAY_URL}" ^
+                                    --env-var "env=dev" ^
+                                    --reporters cli,json ^
+                                    --reporter-json-export "results-${col.name}.json" ^
+                                    --timeout-request 30000
+                            """,
+                            returnStatus: true
+                        )
+                        if (status != 0) failed++
+                    }
+
+                    if (failed > 0) {
+                        error "${failed} integration test collection(s) failed"
+                    }
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'results-*.json', allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ── Connectivity Check via Gateway ──
+        stage('Connectivity Check') {
+            steps {
+                script {
+                    def endpoints = ['/api/products', '/api/categories']
+                    def failed = 0
+
+                    endpoints.each { ep ->
+                        def status = bat(
+                            script: "curl -s -o nul -w \"%%{http_code}\" \"${env.GATEWAY_URL}${ep}\" --max-time 10 2>nul",
+                            returnStdout: true
+                        ).trim().readLines().last()
+
+                        if (status == '200' || status == '401') {
+                            echo "  ✅ GET ${ep} → HTTP ${status}"
+                        } else {
+                            echo "  ❌ GET ${ep} → HTTP ${status}"
+                            failed++
+                        }
+                    }
+
+                    if (failed > 0) {
+                        error "❌ ${failed} connectivity check(s) failed"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Dev deployment + integration tests passed for ${params.VERSION}"
+            notifyDeploy(status: 'SUCCESS', environment: 'dev', version: params.VERSION)
+            // Auto-promote to QA
+            build job: 'shopmicro-deploy-qa',
+                  parameters: [string(name: 'VERSION', value: params.VERSION)],
+                  wait: false
+        }
+        failure {
+            echo '❌ Dev deployment or integration tests failed'
+            notifyDeploy(status: 'FAILURE', environment: 'dev', version: params.VERSION)
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

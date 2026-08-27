@@ -1,0 +1,122 @@
+// ─── Stage 1: PR Validation Pipeline (No Docker) ─────────────────────
+// Triggers on every Pull Request via Git webhook.
+// Gates: compile, unit tests, SonarQube quality gate, Angular lint.
+// PR cannot merge unless ALL gates pass.
+// ─────────────────────────────────────────────────────────────────────
+
+@Library('shopmicro-shared') _
+
+pipeline {
+    agent { label 'builder' }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds(abortPrevious: true)
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
+    environment {
+        JAVA_HOME  = tool name: 'jdk-21',    type: 'jdk'
+        MAVEN_HOME = tool name: 'maven-3.9', type: 'maven'
+        PATH       = "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${PATH}"
+    }
+
+    stages {
+
+        // ── Checkout ──
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        // ── Detect what changed in this PR ──
+        stage('Detect Changes') {
+            steps {
+                script {
+                    env.CHANGES = detectChanges("HEAD~1")
+                    echo "Changed services: ${env.CHANGES.services}"
+                    echo "Total changed components: ${env.CHANGES.total}"
+                    if (env.CHANGES.total == 0) {
+                        currentBuild.result = 'NOT_BUILT'
+                        echo 'No service changes detected — skipping pipeline'
+                        return
+                    }
+                }
+            }
+        }
+
+        // ── Compile & Unit Tests ──
+        stage('Build & Test') {
+            when { expression { env.CHANGES?.hasJava } }
+            steps {
+                script {
+                    def modules = env.CHANGES.services.join(',')
+                    bat """
+                        mvn -B -pl "${modules}" -am clean verify ^
+                            -Djacoco.destFile=target/jacoco.exec ^
+                            -Dmaven.test.failure.ignore=false ^
+                            -q
+                    """
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true,
+                          testResults: '**/target/surefire-reports/*.xml'
+                    jacoco execPattern: '**/target/jacoco.exec',
+                           minimumInstructionCoverage: '60'
+                }
+            }
+        }
+
+        // ── SonarQube Analysis ──
+        stage('SonarQube') {
+            when { expression { env.CHANGES?.hasJava } }
+            steps {
+                withSonarQubeEnv('sonarqube') {
+                    script {
+                        def modules = env.CHANGES.services.join(',')
+                        bat """
+                            mvn -B -pl "${modules}" sonar:sonar ^
+                                -Dsonar.projectKey=shopmicro
+                        """
+                    }
+                }
+            }
+        }
+
+        // ── SonarQube Quality Gate ──
+        stage('Quality Gate') {
+            when { expression { env.CHANGES?.hasJava } }
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        // ── Frontend Lint (Angular) ──
+        stage('Frontend Lint') {
+            when { expression { env.CHANGES?.frontendChanged } }
+            steps {
+                dir('microservices-app') {
+                    bat 'npm ci --prefer-offline'
+                    bat 'npm run lint -- --max-warnings=0'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ All PR validation gates passed — merge allowed'
+        }
+        failure {
+            echo '❌ PR validation failed — merge blocked'
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

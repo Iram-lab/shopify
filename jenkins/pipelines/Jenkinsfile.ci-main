@@ -1,0 +1,186 @@
+// ─── Stage 2: CI Main Pipeline (No Docker) ───────────────────────────
+// Triggers on every merge/push to main branch.
+// Flow: Version → Detect Changes → Build JARs → Frontend Build → Audit
+// No Docker, No Registry — JARs are stashed and deployed directly via java -jar
+// Spring Cloud Eureka handles service discovery.
+// ─────────────────────────────────────────────────────────────────────
+
+@Library('shopmicro-shared') _
+
+pipeline {
+    agent { label 'builder' }
+
+    options {
+        timeout(time: 60, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+    }
+
+    environment {
+        JAVA_HOME  = tool name: 'jdk-21',    type: 'jdk'
+        MAVEN_HOME = tool name: 'maven-3.9', type: 'maven'
+        PATH       = "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${PATH}"
+        DEPLOY_DIR = 'C:\\shopmicro\\jars'
+    }
+
+    stages {
+
+        // ── Checkout ──
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        // ── Semantic Versioning ──
+        stage('Version') {
+            steps {
+                script {
+                    // On Windows, use bat instead of sh for git commands
+                    def shortSha = bat(
+                        script: 'git rev-parse --short=7 HEAD',
+                        returnStdout: true
+                    ).trim().readLines().last()
+
+                    def buildNum = env.BUILD_NUMBER
+                    env.VERSION   = "1.0.${buildNum}-${shortSha}"
+                    env.IMAGE_TAG = env.VERSION
+                    env.SHORT_SHA = shortSha
+
+                    echo "═══════════════════════════════════════"
+                    echo "  Version  : ${env.VERSION}"
+                    echo "  Build #  : ${buildNum}"
+                    echo "  SHA      : ${env.SHORT_SHA}"
+                    echo "═══════════════════════════════════════"
+                }
+            }
+        }
+
+        // ── Detect Changed Services ──
+        stage('Detect Changes') {
+            steps {
+                script {
+                    env.CHANGES = detectChanges('HEAD~1')
+                    echo "Building ${env.CHANGES.total} component(s): ${env.CHANGES.services}"
+                }
+            }
+        }
+
+        // ── Generate Changelog ──
+        stage('Changelog') {
+            steps {
+                script {
+                    generateChangelog(version: env.VERSION)
+                }
+            }
+        }
+
+        // ── Build ALL Java Services (parallel) ──
+        stage('Build Services') {
+            steps {
+                script {
+                    def allServices = [
+                        'microservices-backend/eureka-server',
+                        'microservices-backend/api-gateway',
+                        'microservices-backend/auth-service',
+                        'microservices-backend/product-service',
+                        'microservices-backend/inventory-service',
+                        'microservices-backend/cart-service',
+                        'microservices-backend/order-service',
+                        'microservices-backend/payment-service',
+                        'microservices-backend/notification-service'
+                    ]
+
+                    def parallelBuilds = [:]
+                    allServices.each { svc ->
+                        def name = svc.split('/').last()
+                        def path = svc
+                        parallelBuilds[name] = {
+                            buildService(
+                                servicePath: path,
+                                version: env.VERSION
+                            )
+                        }
+                    }
+                    parallel parallelBuilds
+                }
+            }
+        }
+
+        // ── Copy JARs to Deploy Directory ──
+        stage('Stage JARs') {
+            steps {
+                script {
+                    // Create deploy directory if it doesn't exist
+                    bat "if not exist \"${env.DEPLOY_DIR}\" mkdir \"${env.DEPLOY_DIR}\""
+
+                    def services = [
+                        'eureka-server', 'api-gateway', 'auth-service',
+                        'product-service', 'inventory-service', 'cart-service',
+                        'order-service', 'payment-service', 'notification-service'
+                    ]
+
+                    services.each { svc ->
+                        // Unstash JAR built in Build stage
+                        unstash "jar-${svc}"
+                        // Copy JAR to deploy directory
+                        bat """
+                            copy /Y "microservices-backend\\${svc}\\target\\*.jar" "${env.DEPLOY_DIR}\\${svc}.jar"
+                        """
+                        echo "✅ Staged: ${svc}.jar → ${env.DEPLOY_DIR}"
+                    }
+                }
+            }
+        }
+
+        // ── Angular Frontend Build ──
+        stage('Frontend Build') {
+            steps {
+                dir('microservices-app') {
+                    bat 'npm ci --prefer-offline'
+                    bat 'npm run build -- --configuration production'
+                }
+                echo "✅ Frontend built → microservices-app/dist/"
+            }
+        }
+
+        // ── Build Audit Record ──
+        stage('Audit') {
+            steps {
+                script {
+                    echo """
+                    ═══════════════════════════════════════════════════
+                      BUILD AUDIT RECORD — ShopMicro
+                    ═══════════════════════════════════════════════════
+                      Version   : ${env.VERSION}
+                      Commit    : ${env.GIT_COMMIT}
+                      Branch    : ${env.GIT_BRANCH}
+                      Build #   : ${env.BUILD_NUMBER}
+                      JARs Dir  : ${env.DEPLOY_DIR}
+                      Trigger   : ${currentBuild.getBuildCauses()[0]?.shortDescription}
+                      Timestamp : ${new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))}
+                    ═══════════════════════════════════════════════════
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ CI complete — version ${env.VERSION} JARs ready for deployment"
+            notifyDeploy(status: 'SUCCESS', environment: 'ci', version: env.VERSION)
+            // Auto-trigger dev deployment
+            build job: 'shopmicro-deploy-dev',
+                  parameters: [string(name: 'VERSION', value: env.VERSION)],
+                  wait: false
+        }
+        failure {
+            echo '❌ CI pipeline failed'
+            notifyDeploy(status: 'FAILURE', environment: 'ci', version: env.VERSION ?: 'unknown')
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

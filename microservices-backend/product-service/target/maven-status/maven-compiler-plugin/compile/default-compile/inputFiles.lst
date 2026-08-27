@@ -1,0 +1,15 @@
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\config\DataInitializer.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\config\SecurityConfig.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\controller\CategoryController.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\controller\ProductController.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\dto\ProductDtos.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\entity\Category.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\entity\Product.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\exception\GlobalExceptionHandler.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\exception\ResourceNotFoundException.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\mapper\ProductMapper.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\ProductServiceApplication.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\repository\CategoryRepository.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\repository\ProductRepository.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\service\CategoryService.java
+c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\product-service\src\main\java\com\ecommerce\product\service\ProductService.java

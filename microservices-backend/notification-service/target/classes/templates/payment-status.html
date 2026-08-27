@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 30px auto; background: #fff; border-radius: 8px; overflow: hidden; }
+        .header-success { background: #34a853; color: white; padding: 24px; text-align: center; }
+        .header-failed  { background: #ea4335; color: white; padding: 24px; text-align: center; }
+        .body { padding: 24px; }
+        .info-box { background: #f8f9fa; border-radius: 6px; padding: 16px; margin: 16px 0; }
+        .footer { background: #f8f9fa; padding: 16px; text-align: center; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div th:class="${isSuccess} ? 'header-success' : 'header-failed'">
+        <h1 th:text="${isSuccess} ? 'Payment Successful' : 'Payment Failed'"></h1>
+    </div>
+    <div class="body">
+        <p>Hi <strong th:text="${firstName}">Customer</strong>,</p>
+
+        <p th:if="${isSuccess}">
+            Your payment has been processed successfully.
+        </p>
+        <p th:unless="${isSuccess}">
+            Unfortunately, your payment could not be processed. Please try again or use a different payment method.
+        </p>
+
+        <div class="info-box">
+            <p><strong>Order Number:</strong> <span th:text="${orderNumber}"></span></p>
+            <p><strong>Payment ID:</strong> <span th:text="${paymentId}"></span></p>
+            <p><strong>Amount:</strong> $<span th:text="${amount}"></span></p>
+            <p><strong>Status:</strong> <span th:text="${status}"></span></p>
+        </div>
+    </div>
+    <div class="footer">
+        <p>If you have any questions, please contact our support team.</p>
+    </div>
+</div>
+</body>
+</html>
