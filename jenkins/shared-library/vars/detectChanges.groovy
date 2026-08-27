@@ -4,10 +4,10 @@
 // If a shared pom.xml changes → rebuild all services.
 
 def call(String baseRef = 'HEAD~1') {
-    def changedFiles = sh(
-        script: "git diff --name-only ${baseRef}...HEAD 2>/dev/null || git diff --name-only HEAD~1",
+    def changedFiles = bat(
+        script: "git diff --name-only ${baseRef}...HEAD 2>nul || git diff --name-only HEAD~1",
         returnStdout: true
-    ).trim().split('\n').toList()
+    ).trim().readLines().drop(1).join('\n').split('\n').toList()
 
     echo "Changed files: ${changedFiles}"
 

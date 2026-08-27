@@ -7,7 +7,7 @@
 @Library('shopmicro-shared') _
 
 pipeline {
-    agent { label 'builder' }
+    agent any
 
     parameters {
         string(name: 'VERSION', description: 'Version from CI Main pipeline')

@@ -4,14 +4,10 @@
 def call(Map config) {
     def version = config.version ?: env.VERSION ?: 'unknown'
 
-    def log = sh(
-        script: """
-            git log --oneline --no-merges \
-                \$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")..HEAD \
-                2>/dev/null | head -50 || echo "No previous tag found"
-        """,
+    def log = bat(
+        script: 'git log --oneline --no-merges HEAD~5..HEAD 2>nul',
         returnStdout: true
-    ).trim()
+    ).trim().readLines().drop(1).join('\n') ?: 'No changes listed'
 
     def changelog = """
 ## ShopMicro Release ${version}
@@ -20,7 +16,7 @@ def call(Map config) {
 **Commit:** ${env.GIT_COMMIT?.take(7) ?: 'N/A'}
 
 ### Changes
-${log ?: 'No changes listed'}
+${log}
 """
 
     writeFile file: "CHANGELOG-${version}.md", text: changelog
