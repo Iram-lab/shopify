@@ -7,7 +7,7 @@
 @Library('shopmicro-shared') _
 
 pipeline {
-    agent { label 'builder' }
+    agent any
 
     options {
         timeout(time: 30, unit: 'MINUTES')
