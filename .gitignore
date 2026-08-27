@@ -1,0 +1,15 @@
+# Maven build output
+**/target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Angular
+microservices-app/node_modules/
+microservices-app/dist/
+microservices-app/.angular/cache/
+
+# Logs
+*.log

@@ -1,5 +1,0 @@
-c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\api-gateway\src\main\java\com\ecommerce\gateway\ApiGatewayApplication.java
-c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\api-gateway\src\main\java\com\ecommerce\gateway\config\JwtUtil.java
-c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\api-gateway\src\main\java\com\ecommerce\gateway\filter\JwtAuthFilter.java
-c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\api-gateway\src\main\java\com\ecommerce\gateway\filter\LoggingFilter.java
-c:\Users\iramnaaz.basade\Desktop\Microservices\microservices-backend\api-gateway\src\main\java\com\ecommerce\gateway\filter\RateLimitFilter.java
