@@ -18,7 +18,8 @@ pipeline {
     environment {
         JAVA_HOME  = tool name: 'jdk-21',    type: 'jdk'
         MAVEN_HOME = tool name: 'maven-3.9', type: 'maven'
-        PATH       = "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${PATH}"
+        NODEJS_HOME = tool name: 'nodejs-20', type: 'nodejs'
+        PATH       = "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${NODEJS_HOME}/bin:${PATH}"
     }
 
     stages {
@@ -99,8 +100,13 @@ pipeline {
         // ── Frontend Lint (Angular) ──
         stage('Frontend Lint') {
             when { expression { env.CHANGES?.frontendChanged } }
+            tools {
+                nodejs 'nodejs-20'
+            }
             steps {
                 dir('microservices-app') {
+                    bat 'node --version'
+                    bat 'npm --version'
                     bat 'npm ci --prefer-offline'
                     bat 'npm run lint -- --max-warnings=0'
                 }
