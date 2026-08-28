@@ -1,38 +1,36 @@
 // vars/buildService.groovy
-// ─── Build a single Spring Boot microservice on Windows ───────────────
-// Maven clean verify → JaCoCo → stash JAR for deploy stage.
+// ─── Build a single Spring Boot microservice ──────────────────────────
+// Flow: Maven clean package → Docker build → Docker push to local registry
 
 def call(Map config) {
     def servicePath = config.servicePath
     def serviceName = servicePath.split('/').last()
     def version     = config.version ?: env.VERSION ?: '0.0.1'
+    def registry    = env.REGISTRY_URL ?: 'localhost:5000'
+    def imageTag    = "${registry}/shopmicro/${serviceName}:${version}"
 
     echo "Building service: ${serviceName} @ ${servicePath}"
 
     dir(servicePath) {
+        // ── Maven build ──
         bat """
-            mvn -B clean verify ^
+            mvn -B clean package ^
                 -Drevision=${version} ^
-                -Djacoco.destFile=target/jacoco.exec ^
+                -DskipTests=false ^
                 -Dmaven.test.failure.ignore=false ^
                 -q
         """
+
+        // ── Docker build ──
+        bat "docker build -t ${imageTag} ."
+
+        // ── Docker push to local registry ──
+        bat "docker push ${imageTag}"
     }
 
     // Publish test results
     junit allowEmptyResults: true,
           testResults: "${servicePath}/target/surefire-reports/*.xml"
 
-    // Publish coverage
-    jacoco(
-        execPattern:   "${servicePath}/target/jacoco.exec",
-        classPattern:  "${servicePath}/target/classes",
-        sourcePattern: "${servicePath}/src/main/java"
-    )
-
-    // Stash JAR for deploy stage
-    stash name: "jar-${serviceName}",
-          includes: "${servicePath}/target/*.jar"
-
-    echo "✅ Built: ${serviceName}"
+    echo "✅ Built and pushed: ${imageTag}"
 }

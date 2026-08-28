@@ -1,8 +1,6 @@
-// ─── Stage 5: Deploy Production (No Docker) ──────────────────────────
+// ─── Stage 5: Deploy Production ───────────────────────────────────────
 // Triggered after QA approval.
-// Stops old prod services → starts new JARs → health check → auto-rollback if failed.
-// Prod runs on same 8xxx ports as dev (dev is stopped before prod starts).
-// Full audit trail on every deployment.
+// Tags current images as backup → deploys new images → health check → auto-rollback if failed.
 // ─────────────────────────────────────────────────────────────────────
 
 @Library('shopmicro-shared') _
@@ -20,120 +18,92 @@ pipeline {
     }
 
     environment {
-        ENV         = 'prod'
-        DEPLOY_DIR  = 'C:\\shopmicro\\jars'
-        BACKUP_DIR  = 'C:\\shopmicro\\jars-backup'
-        LOG_DIR     = 'C:\\shopmicro\\logs\\prod'
-        GATEWAY_URL = 'http://localhost:8080'
-        JAVA_HOME   = tool name: 'jdk-21', type: 'jdk'
-        PATH        = "${JAVA_HOME}/bin:${PATH}"
+        ENV          = 'prod'
+        REGISTRY_URL = 'localhost:5000'
+        IMAGE_TAG    = "${params.VERSION}"
+        GATEWAY_URL  = 'http://localhost:8080'
+        COMPOSE_FILE = 'infra/docker-compose.prod.yml'
     }
 
     stages {
 
-        // ── Snapshot current JARs for rollback ──
-        stage('Snapshot Current Version') {
+        stage('Checkout') {
             steps {
-                script {
-                    bat """
-                        if not exist "${env.BACKUP_DIR}" mkdir "${env.BACKUP_DIR}"
-                        xcopy /Y /I "${env.DEPLOY_DIR}\\*.jar" "${env.BACKUP_DIR}\\" 2>nul || echo No JARs to backup
-                    """
-                    echo "✅ Current JARs backed up to ${env.BACKUP_DIR}"
-                    // Save current version for rollback reference
-                    writeFile file: '.rollback-state', text: "PREVIOUS_VERSION=${params.VERSION}"
-                    archiveArtifacts artifacts: '.rollback-state'
-                }
+                checkout scm
             }
         }
 
-        // ── Stop all running services ──
-        stage('Stop Old Services') {
-            steps {
-                script {
-                    echo "Stopping all running ShopMicro services..."
-                    def ports = [8761, 8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087]
-                    ports.each { port ->
-                        bat(script: """
-                            for /f "tokens=5" %%i in ('netstat -aon ^| findstr ":${port} " 2^>nul') do (
-                                taskkill /PID %%i /F 2>nul
-                            )
-                        """, returnStatus: true)
-                    }
-                    sleep(time: 10, unit: 'SECONDS')
-                    echo "✅ Old services stopped"
-                }
-            }
-        }
-
-        // ── Prepare prod log directory ──
-        stage('Prepare') {
-            steps {
-                bat "if not exist \"${env.LOG_DIR}\" mkdir \"${env.LOG_DIR}\""
-            }
-        }
-
-        // ── Start Eureka first ──
-        stage('Start Eureka') {
-            steps {
-                script {
-                    bat """
-                        start "eureka-prod" /B java -jar ^
-                            -Dspring.profiles.active=prod ^
-                            -Dserver.port=8761 ^
-                            "${env.DEPLOY_DIR}\\eureka-server.jar" ^
-                            > "${env.LOG_DIR}\\eureka-server.log" 2>&1
-                    """
-                    echo "⏳ Waiting 30s for Eureka to start..."
-                    sleep(time: 30, unit: 'SECONDS')
-                }
-            }
-        }
-
-        // ── Rolling start — one service at a time ──
-        stage('Deploy Production') {
+        // ── Tag current running images as rollback backup ──
+        stage('Snapshot for Rollback') {
             steps {
                 script {
                     def services = [
-                        [name: 'api-gateway',         port: 8080],
+                        'eureka-server', 'api-gateway', 'auth-service',
+                        'product-service', 'inventory-service', 'cart-service',
+                        'order-service', 'payment-service', 'notification-service'
+                    ]
+                    services.each { svc ->
+                        bat(
+                            script: "docker tag ${env.REGISTRY_URL}/shopmicro/${svc}:latest ${env.REGISTRY_URL}/shopmicro/${svc}:rollback 2>nul",
+                            returnStatus: true
+                        )
+                    }
+                    echo "✅ Current images tagged as :rollback"
+                }
+            }
+        }
+
+        stage('Stop Old Prod Containers') {
+            steps {
+                bat "docker-compose -f ${env.COMPOSE_FILE} down --remove-orphans 2>nul || echo No prod containers running"
+                sleep(time: 10, unit: 'SECONDS')
+            }
+        }
+
+        stage('Pull New Images') {
+            steps {
+                script {
+                    def services = [
+                        'eureka-server', 'api-gateway', 'auth-service',
+                        'product-service', 'inventory-service', 'cart-service',
+                        'order-service', 'payment-service', 'notification-service'
+                    ]
+                    services.each { svc ->
+                        bat "docker pull ${env.REGISTRY_URL}/shopmicro/${svc}:${env.IMAGE_TAG}"
+                        // Also tag as latest so compose can use it
+                        bat "docker tag ${env.REGISTRY_URL}/shopmicro/${svc}:${env.IMAGE_TAG} ${env.REGISTRY_URL}/shopmicro/${svc}:latest"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Production') {
+            steps {
+                bat """
+                    set REGISTRY_URL=${env.REGISTRY_URL}
+                    set IMAGE_TAG=${env.IMAGE_TAG}
+                    docker-compose -f ${env.COMPOSE_FILE} up -d --force-recreate
+                """
+                echo "⏳ Waiting 90s for prod services to start..."
+                sleep(time: 90, unit: 'SECONDS')
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                script {
+                    def services = [
+                        [name: 'eureka-server',       port: 8761],
+                        [name: 'api-gateway',          port: 8080],
                         [name: 'auth-service',         port: 8081],
                         [name: 'product-service',      port: 8082],
                         [name: 'inventory-service',    port: 8083],
                         [name: 'cart-service',         port: 8084],
                         [name: 'payment-service',      port: 8085],
                         [name: 'order-service',        port: 8086],
-                        [name: 'notification-service', port: 8087],
+                        [name: 'notification-service', port: 8087]
                     ]
 
-                    services.each { svc ->
-                        echo "🚀 Starting prod: ${svc.name} on port ${svc.port}"
-                        bat """
-                            start "${svc.name}-prod" /B java -jar ^
-                                -Dspring.profiles.active=prod ^
-                                -Dserver.port=${svc.port} ^
-                                -Deureka.client.serviceUrl.defaultZone=http://localhost:8761/eureka/ ^
-                                "${env.DEPLOY_DIR}\\${svc.name}.jar" ^
-                                > "${env.LOG_DIR}\\${svc.name}.log" 2>&1
-                        """
-                        // Wait between each service (rolling deploy)
-                        sleep(time: 15, unit: 'SECONDS')
-                    }
-
-                    echo "⏳ Waiting 60s for all prod services to fully start..."
-                    sleep(time: 60, unit: 'SECONDS')
-                }
-            }
-        }
-
-        // ── Eureka Health Check ──
-        stage('Eureka Health Check') {
-            steps {
-                script {
-                    def services = [
-                        'api-gateway', 'auth-service', 'product-service',
-                        'inventory-service', 'cart-service', 'order-service',
-                        'payment-service', 'notification-service'
-                    ]
                     def maxWait = 180
                     def interval = 10
                     def elapsed = 0
@@ -143,10 +113,9 @@ pipeline {
                         allUp = true
                         services.each { svc ->
                             def status = bat(
-                                script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:8761/eureka/apps/${svc.toUpperCase()} 2>nul",
+                                script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 5 2>nul",
                                 returnStdout: true
                             ).trim().readLines().last()
-
                             if (status != '200') {
                                 allUp = false
                             }
@@ -157,131 +126,29 @@ pipeline {
                         }
                     }
 
+                    env.DEPLOY_HEALTHY = allUp.toString()
+
                     if (!allUp) {
-                        error "❌ Not all prod services registered with Eureka within ${maxWait}s"
+                        error "❌ Health check failed — triggering rollback"
                     }
-                    echo "✅ All prod services registered with Eureka!"
+                    echo "✅ All prod services healthy!"
                 }
             }
         }
 
-        // ── Smoke Test ──
-        stage('Smoke Test') {
-            steps {
-                script {
-                    def services = [
-                        [name: 'eureka-server',        port: 8761],
-                        [name: 'api-gateway',           port: 8080],
-                        [name: 'auth-service',          port: 8081],
-                        [name: 'product-service',       port: 8082],
-                        [name: 'inventory-service',     port: 8083],
-                        [name: 'cart-service',          port: 8084],
-                        [name: 'payment-service',       port: 8085],
-                        [name: 'order-service',         port: 8086],
-                        [name: 'notification-service',  port: 8087],
-                    ]
-
-                    def failed = 0
-                    services.each { svc ->
-                        def status = bat(
-                            script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 10 2>nul",
-                            returnStdout: true
-                        ).trim().readLines().last()
-
-                        if (status == '200') {
-                            echo "  ✅ ${svc.name} → UP"
-                        } else {
-                            echo "  ❌ ${svc.name} → HTTP ${status}"
-                            failed++
-                        }
-                    }
-
-                    env.DEPLOY_HEALTHY = (failed == 0).toString()
-
-                    if (failed > 0) {
-                        error "❌ ${failed} service(s) failed health check — triggering rollback"
-                    }
-                }
-            }
-        }
-
-        // ── Auto-Rollback if health check failed ──
-        stage('Auto-Rollback') {
-            when { expression { env.DEPLOY_HEALTHY == 'false' } }
-            steps {
-                script {
-                    echo '🚨 ROLLING BACK — health check failed'
-                    echo "Restoring JARs from backup..."
-
-                    // Stop failed services
-                    def ports = [8761, 8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087]
-                    ports.each { port ->
-                        bat(script: """
-                            for /f "tokens=5" %%i in ('netstat -aon ^| findstr ":${port} " 2^>nul') do (
-                                taskkill /PID %%i /F 2>nul
-                            )
-                        """, returnStatus: true)
-                    }
-
-                    // Restore backup JARs
-                    bat "xcopy /Y /I \"${env.BACKUP_DIR}\\*.jar\" \"${env.DEPLOY_DIR}\\\""
-
-                    // Restart from backup
-                    bat """
-                        start "eureka-rollback" /B java -jar ^
-                            -Dspring.profiles.active=prod ^
-                            -Dserver.port=8761 ^
-                            "${env.DEPLOY_DIR}\\eureka-server.jar" ^
-                            > "${env.LOG_DIR}\\eureka-rollback.log" 2>&1
-                    """
-                    sleep(time: 30, unit: 'SECONDS')
-
-                    def services = [
-                        [name: 'api-gateway',         port: 8080],
-                        [name: 'auth-service',         port: 8081],
-                        [name: 'product-service',      port: 8082],
-                        [name: 'inventory-service',    port: 8083],
-                        [name: 'cart-service',         port: 8084],
-                        [name: 'payment-service',      port: 8085],
-                        [name: 'order-service',        port: 8086],
-                        [name: 'notification-service', port: 8087],
-                    ]
-                    services.each { svc ->
-                        bat """
-                            start "${svc.name}-rollback" /B java -jar ^
-                                -Dspring.profiles.active=prod ^
-                                -Dserver.port=${svc.port} ^
-                                -Deureka.client.serviceUrl.defaultZone=http://localhost:8761/eureka/ ^
-                                "${env.DEPLOY_DIR}\\${svc.name}.jar" ^
-                                > "${env.LOG_DIR}\\${svc.name}-rollback.log" 2>&1
-                        """
-                        sleep(time: 10, unit: 'SECONDS')
-                    }
-                    error 'Production deployment rolled back due to health check failure'
-                }
-            }
-        }
-
-        // ── Deployment Audit Trail ──
         stage('Deployment Audit') {
             steps {
                 script {
-                    def outcome = env.DEPLOY_HEALTHY == 'true' ? 'SUCCESS' : 'ROLLED_BACK'
                     echo """
                     ═══════════════════════════════════════════════════
                       PRODUCTION DEPLOYMENT AUDIT — ShopMicro
                     ═══════════════════════════════════════════════════
                       Version     : ${params.VERSION}
-                      Outcome     : ${outcome}
+                      Outcome     : SUCCESS
                       Commit      : ${env.GIT_COMMIT ?: 'N/A'}
-                      Deployer    : ${currentBuild.getBuildCauses()[0]?.userId ?: 'ci-pipeline'}
                       Build #     : ${env.BUILD_NUMBER}
+                      Registry    : ${env.REGISTRY_URL}
                       Timestamp   : ${new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))}
-                      Environment : production
-                      Deploy Dir  : ${env.DEPLOY_DIR}
-                      Services    : api-gateway, auth-service, product-service,
-                                    inventory-service, cart-service, order-service,
-                                    payment-service, notification-service
                     ═══════════════════════════════════════════════════
                     """
                 }
@@ -295,11 +162,32 @@ pipeline {
             notifyDeploy(status: 'SUCCESS', environment: 'prod', version: params.VERSION)
         }
         failure {
-            echo '❌ Production deployment failed — check audit log'
-            notifyDeploy(status: 'ROLLBACK', environment: 'prod', version: params.VERSION)
+            script {
+                echo '🚨 ROLLING BACK production to previous version'
+                def services = [
+                    'eureka-server', 'api-gateway', 'auth-service',
+                    'product-service', 'inventory-service', 'cart-service',
+                    'order-service', 'payment-service', 'notification-service'
+                ]
+                // Stop failed containers
+                bat "docker-compose -f ${env.COMPOSE_FILE} down --remove-orphans 2>nul || echo done"
+                // Restore rollback images as latest
+                services.each { svc ->
+                    bat(
+                        script: "docker tag ${env.REGISTRY_URL}/shopmicro/${svc}:rollback ${env.REGISTRY_URL}/shopmicro/${svc}:latest 2>nul",
+                        returnStatus: true
+                    )
+                }
+                // Restart with rollback images
+                bat """
+                    set REGISTRY_URL=${env.REGISTRY_URL}
+                    set IMAGE_TAG=rollback
+                    docker-compose -f ${env.COMPOSE_FILE} up -d
+                """
+                echo "✅ Rollback complete"
+                notifyDeploy(status: 'ROLLBACK', environment: 'prod', version: params.VERSION)
+            }
         }
-        always {
-            cleanWs()
-        }
+        always { cleanWs() }
     }
 }

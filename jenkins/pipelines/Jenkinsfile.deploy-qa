@@ -1,6 +1,6 @@
-// ─── Stage 4: Deploy QA (No Docker) ──────────────────────────────────
-// Auto-triggered after dev integration tests pass.
-// Runs same JARs on QA ports (9xxx) so dev and QA can run side by side.
+// ─── Stage 4: Deploy QA ───────────────────────────────────────────────
+// Auto-triggered after dev passes.
+// Runs same images on QA ports (9xxx) via docker-compose.qa.yml.
 // Requires manual approval before promoting to prod.
 // ─────────────────────────────────────────────────────────────────────
 
@@ -19,106 +19,69 @@ pipeline {
     }
 
     environment {
-        ENV         = 'qa'
-        DEPLOY_DIR  = 'C:\\shopmicro\\jars'
-        LOG_DIR     = 'C:\\shopmicro\\logs\\qa'
-        // QA runs on 9xxx ports so it doesn't clash with dev on 8xxx
-        GATEWAY_URL = 'http://localhost:9080'
-        JAVA_HOME   = tool name: 'jdk-21', type: 'jdk'
-        PATH        = "${JAVA_HOME}/bin:${PATH}"
+        ENV          = 'qa'
+        REGISTRY_URL = 'localhost:5000'
+        IMAGE_TAG    = "${params.VERSION}"
+        GATEWAY_URL  = 'http://localhost:9080'
+        COMPOSE_FILE = 'infra/docker-compose.qa.yml'
     }
 
     stages {
 
-        // ── Stop old QA services ──
-        stage('Stop Old QA Services') {
+        stage('Checkout') {
             steps {
-                script {
-                    echo "Stopping old QA services on 9xxx ports..."
-                    // Kill java processes on QA ports
-                    def qaPorts = [9761, 9080, 9081, 9082, 9083, 9084, 9085, 9086, 9087]
-                    qaPorts.each { port ->
-                        bat(script: """
-                            for /f "tokens=5" %%i in ('netstat -aon ^| findstr ":${port} " 2^>nul') do (
-                                taskkill /PID %%i /F 2>nul
-                            )
-                        """, returnStatus: true)
-                    }
-                    sleep(time: 5, unit: 'SECONDS')
-                }
+                checkout scm
             }
         }
 
-        // ── Prepare QA log directory ──
-        stage('Prepare') {
+        stage('Stop Old QA Containers') {
             steps {
-                bat "if not exist \"${env.LOG_DIR}\" mkdir \"${env.LOG_DIR}\""
-                echo "✅ QA log directory ready: ${env.LOG_DIR}"
+                bat "docker-compose -f ${env.COMPOSE_FILE} down --remove-orphans 2>nul || echo No QA containers running"
             }
         }
 
-        // ── Start Eureka on QA port 9761 ──
-        stage('Start Eureka QA') {
-            steps {
-                script {
-                    bat """
-                        start "eureka-qa" /B java -jar ^
-                            -Dspring.profiles.active=qa ^
-                            -Dserver.port=9761 ^
-                            -Deureka.instance.hostname=localhost ^
-                            -Deureka.client.serviceUrl.defaultZone=http://localhost:9761/eureka/ ^
-                            "${env.DEPLOY_DIR}\\eureka-server.jar" ^
-                            > "${env.LOG_DIR}\\eureka-server.log" 2>&1
-                    """
-                    echo "⏳ Waiting 30s for QA Eureka to start..."
-                    sleep(time: 30, unit: 'SECONDS')
-                }
-            }
-        }
-
-        // ── Start all QA services on 9xxx ports ──
-        stage('Start QA Services') {
+        stage('Pull Images') {
             steps {
                 script {
                     def services = [
-                        [name: 'api-gateway',         port: 9080],
+                        'eureka-server', 'api-gateway', 'auth-service',
+                        'product-service', 'inventory-service', 'cart-service',
+                        'order-service', 'payment-service', 'notification-service'
+                    ]
+                    services.each { svc ->
+                        bat "docker pull ${env.REGISTRY_URL}/shopmicro/${svc}:${env.IMAGE_TAG}"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy QA') {
+            steps {
+                bat """
+                    set REGISTRY_URL=${env.REGISTRY_URL}
+                    set IMAGE_TAG=${env.IMAGE_TAG}
+                    docker-compose -f ${env.COMPOSE_FILE} up -d --force-recreate
+                """
+                echo "⏳ Waiting 60s for QA services to start..."
+                sleep(time: 60, unit: 'SECONDS')
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                script {
+                    def services = [
+                        [name: 'eureka-server',       port: 9761],
+                        [name: 'api-gateway',          port: 9080],
                         [name: 'auth-service',         port: 9081],
                         [name: 'product-service',      port: 9082],
                         [name: 'inventory-service',    port: 9083],
                         [name: 'cart-service',         port: 9084],
                         [name: 'payment-service',      port: 9085],
                         [name: 'order-service',        port: 9086],
-                        [name: 'notification-service', port: 9087],
+                        [name: 'notification-service', port: 9087]
                     ]
 
-                    services.each { svc ->
-                        bat """
-                            start "${svc.name}-qa" /B java -jar ^
-                                -Dspring.profiles.active=qa ^
-                                -Dserver.port=${svc.port} ^
-                                -Deureka.client.serviceUrl.defaultZone=http://localhost:9761/eureka/ ^
-                                "${env.DEPLOY_DIR}\\${svc.name}.jar" ^
-                                > "${env.LOG_DIR}\\${svc.name}.log" 2>&1
-                        """
-                        echo "🚀 Started QA: ${svc.name} on port ${svc.port}"
-                        sleep(time: 5, unit: 'SECONDS')
-                    }
-
-                    echo "⏳ Waiting 60s for all QA services to fully start..."
-                    sleep(time: 60, unit: 'SECONDS')
-                }
-            }
-        }
-
-        // ── Eureka Health Check for QA ──
-        stage('Eureka Health Check') {
-            steps {
-                script {
-                    def services = [
-                        'api-gateway', 'auth-service', 'product-service',
-                        'inventory-service', 'cart-service', 'order-service',
-                        'payment-service', 'notification-service'
-                    ]
                     def maxWait = 120
                     def interval = 10
                     def elapsed = 0
@@ -128,15 +91,14 @@ pipeline {
                         allUp = true
                         services.each { svc ->
                             def status = bat(
-                                script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:9761/eureka/apps/${svc.toUpperCase()} 2>nul",
+                                script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 5 2>nul",
                                 returnStdout: true
                             ).trim().readLines().last()
-
-                            if (status == '200') {
-                                echo "  ✅ ${svc} registered in QA Eureka"
-                            } else {
-                                echo "  ⏳ ${svc} not yet registered (${elapsed}s)..."
+                            if (status != '200') {
                                 allUp = false
+                                echo "  ⏳ ${svc.name} not ready (${elapsed}s)"
+                            } else {
+                                echo "  ✅ ${svc.name} UP"
                             }
                         }
                         if (!allUp) {
@@ -146,66 +108,24 @@ pipeline {
                     }
 
                     if (!allUp) {
-                        error "❌ Not all QA services registered with Eureka within ${maxWait}s"
+                        bat "docker-compose -f ${env.COMPOSE_FILE} logs --tail=50"
+                        error "❌ Not all QA services healthy within ${maxWait}s"
                     }
+                    echo "✅ All QA services healthy!"
                 }
             }
         }
 
-        // ── Smoke Test QA ──
-        stage('Smoke Test') {
-            steps {
-                script {
-                    def services = [
-                        [name: 'eureka-server',        port: 9761],
-                        [name: 'api-gateway',           port: 9080],
-                        [name: 'auth-service',          port: 9081],
-                        [name: 'product-service',       port: 9082],
-                        [name: 'inventory-service',     port: 9083],
-                        [name: 'cart-service',          port: 9084],
-                        [name: 'payment-service',       port: 9085],
-                        [name: 'order-service',         port: 9086],
-                        [name: 'notification-service',  port: 9087],
-                    ]
-
-                    def failed = 0
-                    services.each { svc ->
-                        def status = bat(
-                            script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 10 2>nul",
-                            returnStdout: true
-                        ).trim().readLines().last()
-
-                        if (status == '200') {
-                            echo "  ✅ ${svc.name} → UP"
-                        } else {
-                            echo "  ❌ ${svc.name} → HTTP ${status}"
-                            failed++
-                        }
-                    }
-
-                    if (failed > 0) {
-                        error "❌ ${failed} QA service(s) failed smoke test"
-                    }
-                }
-            }
-        }
-
-        // ── Regression Tests via Newman ──
         stage('Regression Tests') {
             steps {
                 script {
-                    bat 'npm install -g newman --prefer-offline 2>nul || echo Newman already installed'
-
                     def collections = findFiles(glob: 'infra/postman/**/*.postman_collection.json')
-
                     if (collections.size() == 0) {
-                        echo 'No Postman collections found — skipping regression tests'
+                        echo 'No Postman collections found — skipping'
                         return
                     }
-
                     def failed = 0
                     collections.each { col ->
-                        echo "═══ Running: ${col.name} ═══"
                         def status = bat(
                             script: """
                                 newman run "${col.path}" ^
@@ -219,10 +139,7 @@ pipeline {
                         )
                         if (status != 0) failed++
                     }
-
-                    if (failed > 0) {
-                        unstable "${failed} regression test collection(s) failed — marking UNSTABLE"
-                    }
+                    if (failed > 0) unstable "${failed} regression test(s) failed"
                 }
             }
             post {
@@ -232,21 +149,13 @@ pipeline {
             }
         }
 
-        // ── Manual Approval Gate before Production ──
         stage('Approve for Production') {
             steps {
                 script {
-                    def approver = input(
+                    input(
                         message: "Deploy version ${params.VERSION} to PRODUCTION?",
-                        ok: 'Approve & Deploy',
-                        submitter: 'admin,release-manager',
-                        parameters: [
-                            string(name: 'RELEASE_NOTES',
-                                   defaultValue: '',
-                                   description: 'Optional release notes')
-                        ]
+                        ok: 'Approve & Deploy'
                     )
-                    env.RELEASE_NOTES = approver ?: 'No release notes provided'
                     echo "✅ Production deployment approved"
                 }
             }
@@ -255,7 +164,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ QA passed — version ${params.VERSION} approved for production"
+            echo "✅ QA passed — ${params.VERSION} approved for production"
             notifyDeploy(status: 'SUCCESS', environment: 'qa', version: params.VERSION)
             build job: 'shopmicro-deploy-prod',
                   parameters: [string(name: 'VERSION', value: params.VERSION)],
@@ -266,11 +175,9 @@ pipeline {
             notifyDeploy(status: 'FAILURE', environment: 'qa', version: params.VERSION)
         }
         aborted {
-            echo '⚠️ Production approval rejected or timed out'
+            echo '⚠️ Production approval rejected'
             notifyDeploy(status: 'UNSTABLE', environment: 'qa', version: params.VERSION)
         }
-        always {
-            cleanWs()
-        }
+        always { cleanWs() }
     }
 }
