@@ -1,0 +1,138 @@
+global:
+  registry: docker.io/iramnaazbasade
+  imageTag: "latest"
+
+services:
+  - name: eureka-server
+    port: 8761
+    env:
+      - name: SPRING_PROFILES_ACTIVE
+        value: dev
+
+  - name: api-gateway
+    port: 8080
+    env:
+      - name: SPRING_PROFILES_ACTIVE
+        value: dev
+      - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+        value: http://eureka-server:8761/eureka/
+
+  - name: auth-service
+    port: 8081
+    env:
+      - name: SPRING_PROFILES_ACTIVE
+        value: dev
+      - name: SPRING_DATASOURCE_URL
+        value: jdbc:mysql://mysql:3306/auth_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - name: SPRING_DATASOURCE_USERNAME
+        value: root
+      - name: SPRING_DATASOURCE_PASSWORD
+        value: root
+      - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+        value: http://eureka-server:8761/eureka/
+
+  - name: product-service
+    port: 8082
+    env:
+      - name: SPRING_PROFILES_ACTIVE
+        value: dev
+      - name: SPRING_DATASOURCE_URL
+        value: jdbc:mysql://mysql:3306/product_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - name: SPRING_DATASOURCE_USERNAME
+        value: root
+      - name: SPRING_DATASOURCE_PASSWORD
+        value: root
+      - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+        value: http://eureka-server:8761/eureka/
+
+  - name: inventory-service
+    port: 8083
+    env:
+      - name: SPRING_PROFILES_ACTIVE
+        value: dev
+      - name: SPRING_DATASOURCE_URL
+        value: jdbc:mysql://mysql:3306/inventory_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - name: SPRING_DATASOURCE_USERNAME
+        value: root
+      - name: SPRING_DATASOURCE_PASSWORD
+        value: root
+      - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+        value: http://eureka-server:8761/eureka/
+      - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+        value: kafka:9092
+
+  - name: cart-service
+    port: 8084
+    env:
+      - name: SPRING_PROFILES_ACTIVE
+        value: dev
+      - name: SPRING_DATASOURCE_URL
+        value: jdbc:mysql://mysql:3306/cart_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - name: SPRING_DATASOURCE_USERNAME
+        value: root
+      - name: SPRING_DATASOURCE_PASSWORD
+        value: root
+      - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+        value: http://eureka-server:8761/eureka/
+
+  - name: payment-service
+    port: 8085
+    env:
+      - name: SPRING_PROFILES_ACTIVE
+        value: dev
+      - name: SPRING_DATASOURCE_URL
+        value: jdbc:mysql://mysql:3306/payment_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - name: SPRING_DATASOURCE_USERNAME
+        value: root
+      - name: SPRING_DATASOURCE_PASSWORD
+        value: root
+      - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+        value: http://eureka-server:8761/eureka/
+      - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+        value: kafka:9092
+
+  - name: order-service
+    port: 8086
+    env:
+      - name: SPRING_PROFILES_ACTIVE
+        value: dev
+      - name: SPRING_DATASOURCE_URL
+        value: jdbc:mysql://mysql:3306/order_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - name: SPRING_DATASOURCE_USERNAME
+        value: root
+      - name: SPRING_DATASOURCE_PASSWORD
+        value: root
+      - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+        value: http://eureka-server:8761/eureka/
+      - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+        value: kafka:9092
+
+  - name: notification-service
+    port: 8087
+    env:
+      - name: SPRING_PROFILES_ACTIVE
+        value: dev
+      - name: SPRING_DATASOURCE_URL
+        value: jdbc:mysql://mysql:3306/notification_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - name: SPRING_DATASOURCE_USERNAME
+        value: root
+      - name: SPRING_DATASOURCE_PASSWORD
+        value: root
+      - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+        value: http://eureka-server:8761/eureka/
+      - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+        value: kafka:9092
+
+mysql:
+  rootPassword: root
+  image: mysql:8.0
+  port: 3306
+
+kafka:
+  image: apache/kafka:3.7.0
+  port: 9092
+  clusterId: "MkU3OEVBNTcwNTJENDM2Qk"
+
+frontend:
+  port: 80
+  nodePort: 4200

@@ -35,7 +35,7 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_ROOT_HOST: '%'
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql-dev-data:/var/lib/mysql
     healthcheck:
