@@ -7,7 +7,6 @@ pipeline {
         COMPOSE_FILE = 'infra/docker-compose.dev.yml'
         JAVA_HOME    = tool name: 'jdk-21',    type: 'jdk'
         MAVEN_HOME   = tool name: 'maven-3.9', type: 'maven'
-        DOCKER_HOME  = 'C:\Users\iramnaaz.basade\AppData\Local\Programs\DockerDesktop\resources\bin'
         PATH         = "${env.JAVA_HOME}/bin;${env.MAVEN_HOME}/bin;C:\\Users\\iramnaaz.basade\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin;${env.PATH}"
     }
 
