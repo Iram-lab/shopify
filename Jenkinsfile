@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        REGISTRY     = 'docker.io/iramlab'
+        REGISTRY     = 'docker.io/iramnaazbasade'
         IMAGE_TAG    = "${env.BUILD_NUMBER}"
         COMPOSE_FILE = 'infra/docker-compose.dev.yml'
         JAVA_HOME    = tool name: 'jdk-21',    type: 'jdk'
@@ -11,7 +11,7 @@ pipeline {
     }
 
     options {
-        timeout(time: 60, unit: 'MINUTES')
+        timeout(time: 180, unit: 'MINUTES')
         disableConcurrentBuilds()
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
