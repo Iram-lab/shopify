@@ -82,15 +82,19 @@ pipeline {
                     ]
                     services.each { svc ->
                         dir("microservices-backend/${svc}") {
-                            bat "docker build -t ${env.REGISTRY}/${svc}:${env.IMAGE_TAG} ."
-                            bat "docker push ${env.REGISTRY}/${svc}:${env.IMAGE_TAG}"
+                            retry(3) {
+                                bat "docker build -t ${env.REGISTRY}/${svc}:${env.IMAGE_TAG} ."
+                                bat "docker push ${env.REGISTRY}/${svc}:${env.IMAGE_TAG}"
+                            }
                             echo "Pushed: ${env.REGISTRY}/${svc}:${env.IMAGE_TAG}"
                         }
                     }
                     // Frontend
                     dir('microservices-app') {
-                        bat "docker build --no-cache --pull -t ${env.REGISTRY}/frontend:${env.IMAGE_TAG} ."
-                        bat "docker push ${env.REGISTRY}/frontend:${env.IMAGE_TAG}"
+                        retry(3) {
+                            bat "docker build --no-cache --pull -t ${env.REGISTRY}/frontend:${env.IMAGE_TAG} ."
+                            bat "docker push ${env.REGISTRY}/frontend:${env.IMAGE_TAG}"
+                        }
                         echo "Pushed: ${env.REGISTRY}/frontend:${env.IMAGE_TAG}"
                     }
                 }
