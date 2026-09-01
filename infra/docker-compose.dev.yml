@@ -1,39 +1,33 @@
 version: '3.8'
 
-# ─── ShopMicro Dev Environment ───────────────────────────────────────
-# Used by Jenkins CI/CD pipeline for dev deployment.
-# IMAGE_TAG is injected by Jenkins pipeline.
-# Spring Cloud Eureka handles service discovery (no Istio/K8s).
-# ─────────────────────────────────────────────────────────────────────
-
 services:
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: shopmicro-zookeeper-dev
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-
+  # ── Kafka KRaft (no Zookeeper) ───────────────────────────────────────
   kafka:
-    image: confluentinc/cp-kafka:7.5.0
+    image: apache/kafka:3.7.0
     container_name: shopmicro-kafka-dev
     ports:
       - "9092:9092"
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-    depends_on:
-      - zookeeper
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
       interval: 15s
       timeout: 10s
       retries: 10
 
+  # ── MySQL ────────────────────────────────────────────────────────────
   mysql:
     image: mysql:8.0
     container_name: shopmicro-mysql-dev
@@ -50,8 +44,9 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Eureka Server ────────────────────────────────────────────────────
   eureka-server:
-    image: ${REGISTRY_URL:-localhost}/shopmicro/eureka-server:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramlab}/eureka-server:${IMAGE_TAG:-latest}
     container_name: shopmicro-eureka-dev
     ports:
       - "8761:8761"
@@ -66,8 +61,9 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── API Gateway ──────────────────────────────────────────────────────
   api-gateway:
-    image: ${REGISTRY_URL:-localhost}/shopmicro/api-gateway:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramlab}/api-gateway:${IMAGE_TAG:-latest}
     container_name: shopmicro-gateway-dev
     ports:
       - "8080:8080"
@@ -78,8 +74,9 @@ services:
       eureka-server:
         condition: service_healthy
 
+  # ── Auth Service ─────────────────────────────────────────────────────
   auth-service:
-    image: ${REGISTRY_URL:-localhost}/shopmicro/auth-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramlab}/auth-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-auth-dev
     ports:
       - "8081:8081"
@@ -95,8 +92,9 @@ services:
       eureka-server:
         condition: service_healthy
 
+  # ── Product Service ──────────────────────────────────────────────────
   product-service:
-    image: ${REGISTRY_URL:-localhost}/shopmicro/product-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramlab}/product-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-product-dev
     ports:
       - "8082:8082"
@@ -112,8 +110,9 @@ services:
       eureka-server:
         condition: service_healthy
 
+  # ── Inventory Service ────────────────────────────────────────────────
   inventory-service:
-    image: ${REGISTRY_URL:-localhost}/shopmicro/inventory-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramlab}/inventory-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-inventory-dev
     ports:
       - "8083:8083"
@@ -132,8 +131,9 @@ services:
       kafka:
         condition: service_healthy
 
+  # ── Cart Service ─────────────────────────────────────────────────────
   cart-service:
-    image: ${REGISTRY_URL:-localhost}/shopmicro/cart-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramlab}/cart-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-cart-dev
     ports:
       - "8084:8084"
@@ -149,8 +149,9 @@ services:
       eureka-server:
         condition: service_healthy
 
+  # ── Payment Service ──────────────────────────────────────────────────
   payment-service:
-    image: ${REGISTRY_URL:-localhost}/shopmicro/payment-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramlab}/payment-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-payment-dev
     ports:
       - "8085:8085"
@@ -171,8 +172,9 @@ services:
       kafka:
         condition: service_healthy
 
+  # ── Order Service ────────────────────────────────────────────────────
   order-service:
-    image: ${REGISTRY_URL:-localhost}/shopmicro/order-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramlab}/order-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-order-dev
     ports:
       - "8086:8086"
@@ -191,8 +193,9 @@ services:
       kafka:
         condition: service_healthy
 
+  # ── Notification Service ─────────────────────────────────────────────
   notification-service:
-    image: ${REGISTRY_URL:-localhost}/shopmicro/notification-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramlab}/notification-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-notification-dev
     ports:
       - "8087:8087"
@@ -210,6 +213,15 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
+  # ── Frontend (Angular + Nginx) ──────────────────────────────────
+  frontend:
+    image: ${REGISTRY_URL:-iramlab}/frontend:${IMAGE_TAG:-latest}
+    container_name: shopmicro-frontend-dev
+    ports:
+      - "4200:80"
+    depends_on:
+      - api-gateway
 
 volumes:
   mysql-dev-data:
