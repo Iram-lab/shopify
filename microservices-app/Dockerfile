@@ -4,6 +4,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --prefer-offline --legacy-peer-deps
 COPY . .
+ENV NODE_OPTIONS=--max-old-space-size=4096
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 RUN npm run build -- --configuration production
 
 
