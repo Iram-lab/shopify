@@ -1,0 +1,36 @@
+@import '@angular/material/prebuilt-themes/azure-blue.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global resets */
+* { box-sizing: border-box; }
+
+body {
+  @apply bg-gray-50 text-gray-900 font-sans;
+  margin: 0;
+}
+
+.dark body {
+  @apply bg-gray-900 text-gray-100;
+}
+
+/* Skeleton loading animation */
+.skeleton {
+  @apply bg-gray-200 rounded animate-pulse;
+}
+
+.dark .skeleton {
+  @apply bg-gray-700;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { @apply bg-gray-100; }
+::-webkit-scrollbar-thumb { @apply bg-gray-400 rounded-full; }
+
+/* Card hover effect */
+.product-card {
+  @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+}
