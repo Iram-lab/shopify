@@ -164,11 +164,7 @@ pipeline {
             echo "Eureka: http://localhost:8761"
         }
         failure {
-            echo "FAILED — Printing logs..."
-            bat "docker-compose -f ${env.COMPOSE_FILE} logs --tail=50 2>nul || echo No logs"
-        }
-        always {
-            cleanWs()
+            echo "FAILED — check Docker Desktop for container logs"
         }
     }
 }
