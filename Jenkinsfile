@@ -89,7 +89,7 @@ pipeline {
                     }
                     // Frontend
                     dir('microservices-app') {
-                        bat "docker build --no-cache -t ${env.REGISTRY}/frontend:${env.IMAGE_TAG} ."
+                        bat "docker build --no-cache --pull -t ${env.REGISTRY}/frontend:${env.IMAGE_TAG} ."
                         bat "docker push ${env.REGISTRY}/frontend:${env.IMAGE_TAG}"
                         echo "Pushed: ${env.REGISTRY}/frontend:${env.IMAGE_TAG}"
                     }
