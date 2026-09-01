@@ -50,7 +50,7 @@ pipeline {
         stage('Build Frontend') {
             steps {
                 dir('microservices-app') {
-                    bat 'npm ci --prefer-offline'
+                    bat 'npm ci --prefer-offline --legacy-peer-deps'
                     bat 'npm run build -- --configuration production'
                     echo 'Frontend built'
                 }
