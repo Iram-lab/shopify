@@ -6,6 +6,7 @@ RUN npm ci --prefer-offline --legacy-peer-deps
 COPY . .
 RUN npm run build -- --configuration production
 
+
 # Stage 2 — Serve with nginx
 FROM nginx:alpine
 COPY --from=builder /app/dist/microservices-app/browser /usr/share/nginx/html
