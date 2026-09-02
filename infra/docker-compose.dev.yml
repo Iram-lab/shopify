@@ -53,11 +53,11 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: dev
     healthcheck:
-      test: ["CMD-SHELL", "echo > /dev/tcp/localhost/8761 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health | grep -q UP || exit 1"]
       interval: 15s
-      timeout: 5s
+      timeout: 10s
       retries: 15
-      start_period: 60s
+      start_period: 90s
 
   # ── API Gateway ──────────────────────────────────────────────────────
   api-gateway:
