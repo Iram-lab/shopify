@@ -116,8 +116,8 @@ pipeline {
                     set IMAGE_TAG=${env.IMAGE_TAG}
                     docker-compose -f ${env.COMPOSE_FILE} up -d --force-recreate
                 """
-                echo "Waiting 60s for services to start..."
-                sleep(time: 60, unit: 'SECONDS')
+                echo "Waiting 120s for services to start..."
+                sleep(time: 120, unit: 'SECONDS')
             }
         }
 

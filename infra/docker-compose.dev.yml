@@ -46,15 +46,12 @@ services:
 
   # ── Eureka Server ────────────────────────────────────────────────────
   eureka-server:
-    image: ${REGISTRY_URL:-iramlab}/eureka-server:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramnaazbasade}/eureka-server:${IMAGE_TAG:-latest}
     container_name: shopmicro-eureka-dev
     ports:
       - "8761:8761"
     environment:
       SPRING_PROFILES_ACTIVE: dev
-    depends_on:
-      mysql:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "echo > /dev/tcp/localhost/8761 || exit 1"]
       interval: 15s
@@ -64,7 +61,7 @@ services:
 
   # ── API Gateway ──────────────────────────────────────────────────────
   api-gateway:
-    image: ${REGISTRY_URL:-iramlab}/api-gateway:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramnaazbasade}/api-gateway:${IMAGE_TAG:-latest}
     container_name: shopmicro-gateway-dev
     ports:
       - "8080:8080"
@@ -77,7 +74,7 @@ services:
 
   # ── Auth Service ─────────────────────────────────────────────────────
   auth-service:
-    image: ${REGISTRY_URL:-iramlab}/auth-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramnaazbasade}/auth-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-auth-dev
     ports:
       - "8081:8081"
@@ -95,7 +92,7 @@ services:
 
   # ── Product Service ──────────────────────────────────────────────────
   product-service:
-    image: ${REGISTRY_URL:-iramlab}/product-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramnaazbasade}/product-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-product-dev
     ports:
       - "8082:8082"
@@ -113,7 +110,7 @@ services:
 
   # ── Inventory Service ────────────────────────────────────────────────
   inventory-service:
-    image: ${REGISTRY_URL:-iramlab}/inventory-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramnaazbasade}/inventory-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-inventory-dev
     ports:
       - "8083:8083"
@@ -134,7 +131,7 @@ services:
 
   # ── Cart Service ─────────────────────────────────────────────────────
   cart-service:
-    image: ${REGISTRY_URL:-iramlab}/cart-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramnaazbasade}/cart-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-cart-dev
     ports:
       - "8084:8084"
@@ -152,7 +149,7 @@ services:
 
   # ── Payment Service ──────────────────────────────────────────────────
   payment-service:
-    image: ${REGISTRY_URL:-iramlab}/payment-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramnaazbasade}/payment-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-payment-dev
     ports:
       - "8085:8085"
@@ -175,7 +172,7 @@ services:
 
   # ── Order Service ────────────────────────────────────────────────────
   order-service:
-    image: ${REGISTRY_URL:-iramlab}/order-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramnaazbasade}/order-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-order-dev
     ports:
       - "8086:8086"
@@ -196,7 +193,7 @@ services:
 
   # ── Notification Service ─────────────────────────────────────────────
   notification-service:
-    image: ${REGISTRY_URL:-iramlab}/notification-service:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramnaazbasade}/notification-service:${IMAGE_TAG:-latest}
     container_name: shopmicro-notification-dev
     ports:
       - "8087:8087"
@@ -217,7 +214,7 @@ services:
 
   # ── Frontend (Angular + Nginx) ──────────────────────────────────
   frontend:
-    image: ${REGISTRY_URL:-iramlab}/frontend:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_URL:-iramnaazbasade}/frontend:${IMAGE_TAG:-latest}
     container_name: shopmicro-frontend-dev
     ports:
       - "4200:80"
