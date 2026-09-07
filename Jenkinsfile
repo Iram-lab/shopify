@@ -105,6 +105,7 @@ pipeline {
         stage('Stop Old Containers') {
             steps {
                 bat "docker-compose -f ${env.COMPOSE_FILE} down --remove-orphans 2>nul || echo No containers running"
+                bat "docker image prune -f 2>nul || echo No dangling images"
             }
         }
 
