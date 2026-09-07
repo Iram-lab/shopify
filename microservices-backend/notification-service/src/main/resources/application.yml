@@ -16,9 +16,6 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
-
-  # Mail configuration — uses Gmail SMTP
-  # For dev: set notification.mail.enabled=false to skip actual sending
   mail:
     host: smtp.gmail.com
     port: 587
@@ -31,12 +28,20 @@ spring:
           starttls:
             enable: true
             required: true
-
   thymeleaf:
     prefix: classpath:/templates/
     suffix: .html
     mode: HTML
     encoding: UTF-8
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.ecommerce.*"
 
 eureka:
   client:
@@ -70,14 +75,3 @@ management:
 logging:
   level:
     com.ecommerce.notification: DEBUG
-
-spring:
-  kafka:
-    bootstrap-servers: kafka:9092
-    consumer:
-      group-id: notification-service-group
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "com.ecommerce.*"

@@ -16,6 +16,18 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: payment-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.ecommerce.*"
 
 eureka:
   client:
@@ -30,11 +42,6 @@ eureka:
 razorpay:
   key-id: rzp_test_TOpt8j6M6j1CXn
   key-secret: a6N5lZ2EpzdvNcOotw2REb7W
-
-# Payment simulation config (used as fallback if Razorpay fails)
-payment:
-  simulation:
-    success-rate: 90
 
 springdoc:
   api-docs:
@@ -54,17 +61,3 @@ management:
 logging:
   level:
     com.ecommerce.payment: DEBUG
-
-spring:
-  kafka:
-    bootstrap-servers: kafka:9092
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-    consumer:
-      group-id: payment-service-group
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "com.ecommerce.*"
