@@ -138,33 +138,69 @@ pipeline {
                         [name: 'notification-service', port: 8087]
                     ]
                     backendServices.each { svc ->
-                        def status = bat(
-                            script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 10 2>nul",
-                            returnStdout: true
-                        ).trim().readLines().last()
+                        def curlCmd = svc.name == 'eureka-server'
+                            ? "curl -s -o nul -w \"%%{http_code}\" -u admin:admin123 http://localhost:${svc.port}/actuator/health --max-time 10 2>nul"
+                            : "curl -s -o nul -w \"%%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 10 2>nul"
+                        def status = bat(script: curlCmd, returnStdout: true).trim().readLines().last()
                         echo status == '200' ? "UP: ${svc.name}" : "WARNING: ${svc.name} returned ${status}"
                     }
 
-                    // Frontend — check nginx root (no actuator)
+                    // Frontend — check via nginx-proxy on port 80
                     def frontendStatus = bat(
-                        script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:4200 --max-time 10 2>nul",
+                        script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:80 --max-time 10 2>nul",
                         returnStdout: true
                     ).trim().readLines().last()
                     echo frontendStatus == '200' ? "UP: frontend" : "WARNING: frontend returned ${frontendStatus}"
                 }
             }
         }
+
     }
+
 
     post {
         success {
-            echo "SUCCESS — Build ${env.IMAGE_TAG} deployed"
-            echo "Frontend: http://localhost:4200"
-            echo "API Gateway: http://localhost:8080"
-            echo "Eureka: http://localhost:8761"
+            echo "SUCCESS - Build ${env.BUILD_NUMBER} deployed"
+            emailext(
+                to: 'your-email@gmail.com, teammate1@gmail.com, teammate2@gmail.com',
+                subject: "SUCCESS - Shopify Build #${env.BUILD_NUMBER} Deployed",
+                body: """
+Build SUCCESS!
+
+Job:       ${env.JOB_NAME}
+Build #:   ${env.BUILD_NUMBER}
+Duration:  ${currentBuild.durationString}
+Triggered: ${currentBuild.getBuildCauses()[0].shortDescription}
+
+Services running at:
+  Frontend:    http://shopify.local
+  API Gateway: http://shopify.local/api/
+  Eureka:      http://shopify.local/eureka/
+
+Build URL: ${env.BUILD_URL}
+                """,
+                mimeType: 'text/plain'
+            )
         }
         failure {
-            echo "FAILED — check Docker Desktop for container logs"
+            echo "FAILED - check Docker Desktop for container logs"
+            emailext(
+                to: 'your-email@gmail.com, teammate1@gmail.com, teammate2@gmail.com',
+                subject: "FAILED - Shopify Build #${env.BUILD_NUMBER} Needs Attention",
+                body: """
+Build FAILED!
+
+Job:       ${env.JOB_NAME}
+Build #:   ${env.BUILD_NUMBER}
+Duration:  ${currentBuild.durationString}
+Triggered: ${currentBuild.getBuildCauses()[0].shortDescription}
+
+Full console log is attached to this email.
+Or check here: ${env.BUILD_URL}console
+                """,
+                attachLog: true,
+                mimeType: 'text/plain'
+            )
         }
     }
 }
