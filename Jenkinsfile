@@ -74,7 +74,6 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
-                    // Backend
                     def services = [
                         'eureka-server', 'api-gateway', 'auth-service',
                         'product-service', 'inventory-service', 'cart-service',
@@ -89,7 +88,6 @@ pipeline {
                             echo "Pushed: ${env.REGISTRY}/${svc}:${env.IMAGE_TAG}"
                         }
                     }
-                    // Frontend
                     dir('microservices-app') {
                         retry(3) {
                             bat "docker build --no-cache --pull -t ${env.REGISTRY}/frontend:${env.IMAGE_TAG} ."
@@ -126,7 +124,6 @@ pipeline {
         stage('Health Check') {
             steps {
                 script {
-                    // Backend — check Spring Boot actuator
                     def backendServices = [
                         [name: 'eureka-server',       port: 8761],
                         [name: 'api-gateway',          port: 8080],
@@ -140,68 +137,30 @@ pipeline {
                     ]
                     backendServices.each { svc ->
                         def curlCmd = svc.name == 'eureka-server'
-                            ? "curl -s -o nul -w \"%%{http_code}\" -u admin:admin123 http://localhost:${svc.port}/actuator/health --max-time 10 2>nul"
-                            : "curl -s -o nul -w \"%%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 10 2>nul"
+                            ? "curl -s -o nul -w \"%{http_code}\" -u admin:admin123 http://localhost:${svc.port}/actuator/health --max-time 10 --connect-timeout 5 2>nul || echo 000"
+                            : "curl -s -o nul -w \"%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 10 --connect-timeout 5 2>nul || echo 000"
                         def status = bat(script: curlCmd, returnStdout: true).trim().readLines().last()
                         echo status == '200' ? "UP: ${svc.name}" : "WARNING: ${svc.name} returned ${status}"
                     }
-
-                    // Frontend — check via nginx-proxy on port 80
                     def frontendStatus = bat(
-                        script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:80 --max-time 10 2>nul",
+                        script: "curl -s -o nul -w \"%{http_code}\" http://localhost:80 --max-time 10 --connect-timeout 5 2>nul || echo 000",
                         returnStdout: true
                     ).trim().readLines().last()
                     echo frontendStatus == '200' ? "UP: frontend" : "WARNING: frontend returned ${frontendStatus}"
                 }
             }
         }
-
     }
-
 
     post {
         success {
             echo "SUCCESS - Build ${env.BUILD_NUMBER} deployed"
-            emailext(
-                to: 'your-email@gmail.com, teammate1@gmail.com, teammate2@gmail.com',
-                subject: "SUCCESS - Shopify Build #${env.BUILD_NUMBER} Deployed",
-                body: """
-Build SUCCESS!
-
-Job:       ${env.JOB_NAME}
-Build #:   ${env.BUILD_NUMBER}
-Duration:  ${currentBuild.durationString}
-Triggered: ${currentBuild.getBuildCauses()[0].shortDescription}
-
-Services running at:
-  Frontend:    http://shopify.local
-  API Gateway: http://shopify.local/api/
-  Eureka:      http://shopify.local/eureka/
-
-Build URL: ${env.BUILD_URL}
-                """,
-                mimeType: 'text/plain'
-            )
+            echo "Frontend:    http://shopify.local"
+            echo "API Gateway: http://shopify.local/api/"
+            echo "Eureka:      http://shopify.local/eureka/"
         }
         failure {
             echo "FAILED - check Docker Desktop for container logs"
-            emailext(
-                to: 'your-email@gmail.com, teammate1@gmail.com, teammate2@gmail.com',
-                subject: "FAILED - Shopify Build #${env.BUILD_NUMBER} Needs Attention",
-                body: """
-Build FAILED!
-
-Job:       ${env.JOB_NAME}
-Build #:   ${env.BUILD_NUMBER}
-Duration:  ${currentBuild.durationString}
-Triggered: ${currentBuild.getBuildCauses()[0].shortDescription}
-
-Full console log is attached to this email.
-Or check here: ${env.BUILD_URL}console
-                """,
-                attachLog: true,
-                mimeType: 'text/plain'
-            )
         }
     }
 }
