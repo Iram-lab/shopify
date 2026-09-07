@@ -137,13 +137,13 @@ pipeline {
                     ]
                     backendServices.each { svc ->
                         def curlCmd = svc.name == 'eureka-server'
-                            ? "curl -s -o nul -w \"%{http_code}\" -u admin:admin123 http://localhost:${svc.port}/actuator/health --max-time 10 --connect-timeout 5 2>nul || echo 000"
-                            : "curl -s -o nul -w \"%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 10 --connect-timeout 5 2>nul || echo 000"
+                            ? "curl -s -o nul -w \"%%{http_code}\" -u admin:admin123 http://localhost:${svc.port}/actuator/health --max-time 10 --connect-timeout 5 2>nul || echo 000"
+                            : "curl -s -o nul -w \"%%{http_code}\" http://localhost:${svc.port}/actuator/health --max-time 10 --connect-timeout 5 2>nul || echo 000"
                         def status = bat(script: curlCmd, returnStdout: true).trim().readLines().last()
                         echo status == '200' ? "UP: ${svc.name}" : "WARNING: ${svc.name} returned ${status}"
                     }
                     def frontendStatus = bat(
-                        script: "curl -s -o nul -w \"%{http_code}\" http://localhost:80 --max-time 10 --connect-timeout 5 2>nul || echo 000",
+                        script: "curl -s -o nul -w \"%%{http_code}\" http://localhost:80 --max-time 10 --connect-timeout 5 2>nul || echo 000",
                         returnStdout: true
                     ).trim().readLines().last()
                     echo frontendStatus == '200' ? "UP: frontend" : "WARNING: frontend returned ${frontendStatus}"
